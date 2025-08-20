@@ -5,7 +5,8 @@ This repository contains manifests and instructions for installing and configuri
 1. OCP cluster v4.18
 2. mco operator installed
 3. ibm software entitlement key obtained
-4. ibm scale remote storage cluster created and configured
+4. ESI networks with routing to ibm-scale storage backend configured and attached to worker nodes
+5. remote IBM Storage Scale storage cluster provisioned and configured for ESI
 
 The Official IBM Scale Operator documentation can be found here: [Docs](https://www.ibm.com/docs/en/scalecontainernative/5.2.3)
 
@@ -49,8 +50,9 @@ Confirm operator csi manager is running:
  kubectl get pods -n ibm-spectrum-scale-csi
 ```
 
-4. Apply operator CRDs
-- Create [cluster](https://www.ibm.com/docs/en/scalecontainernative/5.2.3?topic=resources-cluster) CR
+4. Apply operator CRs
+
+- Create [cluster](https://www.ibm.com/docs/en/scalecontainernative/5.2.3?topic=resources-cluster) CR: 
 ```
 apiVersion: scale.spectrum.ibm.com/v1beta1
 kind: Cluster
@@ -122,3 +124,64 @@ spec:
   # -------------------------------------------------------------------------------
   networkPolicy: {}
 ```
+
+- Create [remoteCluster](https://www.ibm.com/docs/en/scalecontainernative/5.2.3?topic=resources-remotecluster) CR: 
+The following CR is used to configure connection to the remote ibm-scale storage cluster: 
+```
+apiVersion: scale.spectrum.ibm.com/v1beta1
+kind: RemoteCluster
+metadata:
+  labels:
+    app.kubernetes.io/instance: ibm-spectrum-scale
+    app.kubernetes.io/name: cluster
+  name: remotecluster-sample
+  namespace: ibm-spectrum-scale
+spec:
+  # contactNodes are optional and provides a list of nodes from the storage cluster
+  # to be used as the remote cluster contact nodes.  The names should be the daemon
+  # node names.  If not specified, the operator will use any 3 nodes detected
+  # from the storage cluster.
+  contactNodes:
+  - /* ess node IP */
+  - /* ess node IP */
+  gui:
+    cacert: cacert-storage-cluster-1
+    # This is the secret that contains the CSIAdmin user
+    # credentials in the ibm-spectrum-scale-csi namespace.
+    csiSecretName: csi-remote-mount-storage-cluster-1
+    # hosts are the the GUI endpoints from the storage cluster. Multiple
+    # hosts (up to 3) can be specified to ensure high availability of GUI.
+    hosts:
+    - /* ems IP address */
+    # - guihost2.example.com
+    # - guihost3.example.com
+    insecureSkipVerify: true
+    # This is the secret that contains the ContainerOperator user
+    # credentials in the ibm-spectrum-scale namespace.
+    secretName: cnsa-remote-mount-storage-cluster-1
+
+```
+
+- Create Remote [Filesystem](https://www.ibm.com/docs/en/scalecontainernative/5.2.3?topic=systems-remote-file-system) CR:
+```
+apiVersion: scale.spectrum.ibm.com/v1beta1
+kind: Filesystem
+metadata:
+  name: essfs-remote
+  namespace: ibm-spectrum-scale
+  labels:
+    app.kubernetes.io/instance: ibm-spectrum-scale
+    app.kubernetes.io/name: cluster
+spec:
+  remote:
+    cluster: remotecluster-sample 
+    fs: essfs
+```
+
+## Verifying ibm-scale operator Install 
+
+See [Verifying the IBM Storage Scale container native cluster
+](https://www.ibm.com/docs/en/scalecontainernative/5.2.3?topic=installation-verifying-storage-scale-container-native-cluster)
+
+For some debugging guidance see: [Troubleshooting deployment
+](https://www.ibm.com/docs/en/scalecontainernative/5.2.3?topic=troubleshooting-deployment)
